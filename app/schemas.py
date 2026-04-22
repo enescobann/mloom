@@ -8,17 +8,13 @@ class RunTypeEnum(str, Enum):
     CLASSIC = "CLASSIC"
 
 
-# ==========================================
-# LLM METRICS SCHEMAS
-# ==========================================
 class LLMMetricsBase(BaseModel):
     model_name: str | None = None
     prompt: str | None = None
     response: str | None = None
 
 class LLMMetricsCreate(LLMMetricsBase):
-    pass  # Only user-provided fields: model_name, prompt, response
-
+    pass
 class LLMMetricsResponse(LLMMetricsBase):
     id: int
     run_id: int
@@ -29,30 +25,23 @@ class LLMMetricsResponse(LLMMetricsBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ==========================================
-# RUN SCHEMAS
-# ==========================================
 class RunBase(BaseModel):
     run_type: RunTypeEnum
     tags: dict[str, Any] | None = None
 
 class RunCreate(RunBase):
     project_id: int
-    # No latency — server measures it
 
 class RunResponse(RunBase):
     id: int
     project_id: int
     timestamp: datetime.datetime
-    latency: int | None = None  # Server-measured, response only
+    latency: int | None = None  # Server-measured
     llm_data: LLMMetricsResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# ==========================================
-# PROJECT SCHEMAS
-# ==========================================
 class ProjectBase(BaseModel):
     name: str
 

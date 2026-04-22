@@ -14,9 +14,6 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# ==========================================
-# PROJECTS
-# ==========================================
 @app.post("/projects/", response_model=ProjectResponse)
 async def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
     new_project = Project(name=project.name)
@@ -59,12 +56,8 @@ async def delete_project(project_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Project deleted successfully"}
 
-# ==========================================
-# RUNS
-# ==========================================
 @app.post("/runs/", response_model=RunResponse)
 async def create_run(run: RunCreate, db: Session = Depends(get_db)):
-    # Validate that the parent project exists
     db_project = db.query(Project).filter(Project.id == run.project_id).first()
     if not db_project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -73,7 +66,6 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
         project_id=run.project_id,
         run_type=run.run_type.value,
         tags=run.tags
-        # latency is not user-provided — set later by server
     )
 
     db.add(new_run)
@@ -103,23 +95,19 @@ async def delete_run(run_id: int, db: Session = Depends(get_db)):
 
     return {"message": "Run deleted successfully"}
 
-# ==========================================
-# LLM METRICS
-# ==========================================
 @app.post("/runs/{run_id}/metrics/", response_model=LLMMetricsResponse)
 async def create_llm_metric(run_id: int, metric: LLMMetricsCreate, db: Session = Depends(get_db)):
-    # Validate that the parent run exists
     db_run = db.query(Run).filter(Run.id == run_id).first()
     if not db_run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    # Compute token counts and cost server-side
+    #made up numbers for testing purposes
     input_tokens = len(metric.prompt.split()) if metric.prompt else 0
     output_tokens = len(metric.response.split()) if metric.response else 0
     total_cost = (input_tokens * 0.00001) + (output_tokens * 0.00003)
 
     new_metric = LLMMetrics(
-        run_id=run_id,  # From URL path — no body conflict
+        run_id=run_id,
         model_name=metric.model_name,
         prompt=metric.prompt,
         response=metric.response,
@@ -138,7 +126,7 @@ async def create_llm_metric(run_id: int, metric: LLMMetricsCreate, db: Session =
 async def get_llm_metric(run_id: int, metric_id: int, db: Session = Depends(get_db)):
     db_metric = db.query(LLMMetrics).filter(
         LLMMetrics.id == metric_id,
-        LLMMetrics.run_id == run_id  # Prevents cross-run access
+        LLMMetrics.run_id == run_id
     ).first()
 
     if db_metric is None:
@@ -150,7 +138,7 @@ async def get_llm_metric(run_id: int, metric_id: int, db: Session = Depends(get_
 async def delete_llm_metric(run_id: int, metric_id: int, db: Session = Depends(get_db)):
     db_metric = db.query(LLMMetrics).filter(
         LLMMetrics.id == metric_id,
-        LLMMetrics.run_id == run_id  # Prevents cross-run deletion
+        LLMMetrics.run_id == run_id
     ).first()
 
     if db_metric is None:
