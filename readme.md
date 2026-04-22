@@ -1,1 +1,1 @@
-### MLFlow alternative focused on LLMOps.
+### MLFlow alternative that focuses on LLMOps.
