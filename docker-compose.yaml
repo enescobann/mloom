@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: mlflow_db
+      POSTGRES_DB: mloom_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: mflow-api:v1
+    image: mloom-api:v1
     ports:
       - "8000:8000"
     environment:
