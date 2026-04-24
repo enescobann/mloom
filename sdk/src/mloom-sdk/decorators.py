@@ -3,7 +3,7 @@
 
 import time
 import functools
-from emitter import emit_event
+from .emitter import emit_event
 
 def track_llm(name: str = None):
     def decorator(func):

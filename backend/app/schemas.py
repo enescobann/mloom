@@ -33,12 +33,13 @@ class RunBase(BaseModel):
 
 class RunCreate(RunBase):
     project_id: int
+    metrics: list[LLMMetricsCreate] = []
 
 class RunResponse(RunBase):
     id: int
     project_id: int
     timestamp: datetime.datetime
-    llm_data: LLMMetricsResponse | None = None
+    metrics: LLMMetricsResponse = []
 
     model_config = ConfigDict(from_attributes=True)
 
