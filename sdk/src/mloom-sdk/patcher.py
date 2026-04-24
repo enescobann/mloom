@@ -1,8 +1,8 @@
 #auto pather for populer sdks. For now only OpenAI.
 
 import time
-from emitter import emit_event
-from config import config
+from .emitter import emit_event
+from .config import config
 
 def patch_openai():
     try:

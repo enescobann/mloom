@@ -28,7 +28,7 @@ class Run(Base):
 
     #relation
     project = relationship("Project", back_populates="runs")
-    llm_data = relationship("LLMMetrics", uselist=False, back_populates="run", cascade="all, delete-orphan")
+    metrics = relationship("LLMMetrics", back_populates="run", cascade="all, delete-orphan")
 
 class LLMMetrics(Base):
     __tablename__ = "llm_metrics"

@@ -70,6 +70,23 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
         latency=run.latency
     )
 
+    for metric_data in run.metrics:
+        input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric.prompt.split()) if metric.prompt else 0)
+        output_tokens = metric_data.output_tokens if metric_data.output_tokens is not None else (len(metric.response.split()) if metric.response else 0)
+        total_cost = metric_data.total_cost if metric_data.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
+
+        new_metric = LLMMetrics(
+            run_id=run.id,
+            model_name=metric_data.model_name,
+            prompt=metric_data.prompt,
+            response=metric_data.response,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_cost=total_cost
+        )
+
+        new_run.metrics.append(new_metric)
+
     db.add(new_run)
     db.commit()
     db.refresh(new_run)
@@ -96,32 +113,6 @@ async def delete_run(run_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Run deleted successfully"}
-
-@app.post("/runs/{run_id}/metrics/", response_model=LLMMetricsResponse)
-async def create_llm_metric(run_id: int, metric: LLMMetricsCreate, db: Session = Depends(get_db)):
-    db_run = db.query(Run).filter(Run.id == run_id).first()
-    if not db_run:
-        raise HTTPException(status_code=404, detail="Run not found")
-
-    input_tokens = metric.input_tokens if metric.input_tokens is not None else (len(metric.prompt.split()) if metric.prompt else 0)
-    output_tokens = metric.output_tokens if metric.output_tokens is not None else (len(metric.response.split()) if metric.response else 0)
-    total_cost = metric.total_cost if metric.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
-
-    new_metric = LLMMetrics(
-        run_id=run_id,
-        model_name=metric.model_name,
-        prompt=metric.prompt,
-        response=metric.response,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        total_cost=total_cost
-    )
-
-    db.add(new_metric)
-    db.commit()
-    db.refresh(new_metric)
-
-    return new_metric
 
 @app.get("/runs/{run_id}/metrics/{metric_id}", response_model=LLMMetricsResponse)
 async def get_llm_metric(run_id: int, metric_id: int, db: Session = Depends(get_db)):
