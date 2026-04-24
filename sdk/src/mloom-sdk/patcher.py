@@ -3,6 +3,7 @@
 import time
 from .emitter import emit_event
 from .config import config
+from .contextvar import active_run_metrics
 
 def patch_openai():
     try:
@@ -30,18 +31,31 @@ def patch_openai():
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
 
-        payload = {
-            "project_id": config.project_id,
-            "provider": "openai",
-            "run_name": "OpenAI API Call",
+        metric_data = {
             "model_name": model,
-            "latency_ms": latency_ms,
+            "prompt": str(messages), #keep it simple for now or JSON serialize
+            "response": str(response),
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "prompt": str(messages), #keep it simple for now or JSON serialize
+            # optional: total_cost can be added here or left for backend
         }
 
-        emit_event(payload)
+        #if we are inside a @track_run pipeline
+        current_metrics = active_run_metrics.get()
+
+        if current_metrics is not None:
+            #we are inside a pipeline so append
+            current_metrics.append(metric_data)
+        else:
+            #NOT in a pipeline so pass the metric straight
+            payload = {
+                "project_id": config.project_id,
+                "provider": "openai",
+                "run_name": "OpenAI API Call",
+                "latency_ms": latency_ms,
+                "metrics": [metric_data]
+            }
+            emit_event(payload)
 
         return response
     

@@ -56,6 +56,7 @@ async def delete_project(project_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Project deleted successfully"}
 
+#BULK POST
 @app.post("/runs/", response_model=RunResponse)
 async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     db_project = db.query(Project).filter(Project.id == run.project_id).first()
@@ -82,7 +83,8 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
             response=metric_data.response,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_cost=total_cost
+            total_cost=total_cost,
+            latency=metric_data.latency
         )
 
         new_run.metrics.append(new_metric)
