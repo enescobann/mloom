@@ -72,8 +72,8 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     )
 
     for metric_data in run.metrics:
-        input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric.prompt.split()) if metric.prompt else 0)
-        output_tokens = metric_data.output_tokens if metric_data.output_tokens is not None else (len(metric.response.split()) if metric.response else 0)
+        input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric_data.prompt.split()) if metric_data.prompt else 0)
+        output_tokens = metric_data.output_tokens if metric_data.output_tokens is not None else (len(metric_data.response.split()) if metric_data.response else 0)
         total_cost = metric_data.total_cost if metric_data.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
 
         new_metric = LLMMetrics(

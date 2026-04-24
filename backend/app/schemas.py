@@ -40,7 +40,7 @@ class RunResponse(RunBase):
     id: int
     project_id: int
     timestamp: datetime.datetime
-    metrics: LLMMetricsResponse = []
+    metrics: list[LLMMetricsResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

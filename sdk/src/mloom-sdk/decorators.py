@@ -66,8 +66,8 @@ def track_metric(metric_type: str = "custom_metric"):
                 metric_data = {
                     "model_name": metric_type,
                     "prompt": str(kwargs),
-                    "response": str(result)
-                    #...
+                    "response": str(result),
+                    "latency": latency_ms
                 }
 
                 current_metrics.append(metric_data)
