@@ -22,7 +22,7 @@ def _emit_event_sync(_payload: dict):
             "run_type": "LLM",
             "run_name": _payload.get("run_name", "Unnamed Run"),
             "project_id": config.project_id,
-            "latency": _payload.get("latency_ms"),
+            "latency": _payload.get("latency", _payload.get("latency_ms")),
             "tags": {"provider": provider} if provider else {},
             "metrics": _payload.get("metrics", [])
         }

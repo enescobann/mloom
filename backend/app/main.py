@@ -56,6 +56,7 @@ async def delete_project(project_id: int, db: Session = Depends(get_db)):
     
     return {"message": "Project deleted successfully"}
 
+#BULK POST
 @app.post("/runs/", response_model=RunResponse)
 async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     db_project = db.query(Project).filter(Project.id == run.project_id).first()
@@ -71,8 +72,8 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     )
 
     for metric_data in run.metrics:
-        input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric.prompt.split()) if metric.prompt else 0)
-        output_tokens = metric_data.output_tokens if metric_data.output_tokens is not None else (len(metric.response.split()) if metric.response else 0)
+        input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric_data.prompt.split()) if metric_data.prompt else 0)
+        output_tokens = metric_data.output_tokens if metric_data.output_tokens is not None else (len(metric_data.response.split()) if metric_data.response else 0)
         total_cost = metric_data.total_cost if metric_data.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
 
         new_metric = LLMMetrics(
@@ -82,7 +83,8 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
             response=metric_data.response,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_cost=total_cost
+            total_cost=total_cost,
+            latency=metric_data.latency
         )
 
         new_run.metrics.append(new_metric)

@@ -15,6 +15,7 @@ class LLMMetricsBase(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_cost: float | None = None
+    latency: int | None = None
 
 class LLMMetricsCreate(LLMMetricsBase):
     pass
@@ -39,7 +40,7 @@ class RunResponse(RunBase):
     id: int
     project_id: int
     timestamp: datetime.datetime
-    metrics: LLMMetricsResponse = []
+    metrics: list[LLMMetricsResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 

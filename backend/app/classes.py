@@ -41,6 +41,7 @@ class LLMMetrics(Base):
     input_tokens = Column(Integer)
     output_tokens = Column(Integer)
     total_cost = Column(Float)
+    latency = Column(Integer)
     
     #relation
     run = relationship("Run", back_populates="llm_data")
