@@ -18,6 +18,7 @@ class Project(Base):
 class Run(Base):
     __tablename__ = "runs"
     id = Column(Integer, primary_key=True)
+    run_name = Column(String)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     run_type = Column(Enum("LLM", "CLASSIC", name="run_type"))
     timestamp = Column(DateTime, server_default=func.now())

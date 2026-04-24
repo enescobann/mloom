@@ -12,22 +12,24 @@ class LLMMetricsBase(BaseModel):
     model_name: str | None = None
     prompt: str | None = None
     response: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_cost: float | None = None
 
 class LLMMetricsCreate(LLMMetricsBase):
     pass
 class LLMMetricsResponse(LLMMetricsBase):
     id: int
     run_id: int
-    input_tokens: int | None = None    # Server-computed
-    output_tokens: int | None = None   # Server-computed
-    total_cost: float | None = None    # Server-computed
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class RunBase(BaseModel):
+    run_name: str
     run_type: RunTypeEnum
     tags: dict[str, Any] | None = None
+    latency: int | None = None
 
 class RunCreate(RunBase):
     project_id: int
@@ -36,7 +38,6 @@ class RunResponse(RunBase):
     id: int
     project_id: int
     timestamp: datetime.datetime
-    latency: int | None = None  # Server-measured
     llm_data: LLMMetricsResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)

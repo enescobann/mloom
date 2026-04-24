@@ -65,7 +65,9 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     new_run = Run(
         project_id=run.project_id,
         run_type=run.run_type.value,
-        tags=run.tags
+        run_name=run.run_name,
+        tags=run.tags,
+        latency=run.latency
     )
 
     db.add(new_run)
@@ -101,10 +103,9 @@ async def create_llm_metric(run_id: int, metric: LLMMetricsCreate, db: Session =
     if not db_run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    #made up numbers for testing purposes
-    input_tokens = len(metric.prompt.split()) if metric.prompt else 0
-    output_tokens = len(metric.response.split()) if metric.response else 0
-    total_cost = (input_tokens * 0.00001) + (output_tokens * 0.00003)
+    input_tokens = metric.input_tokens if metric.input_tokens is not None else (len(metric.prompt.split()) if metric.prompt else 0)
+    output_tokens = metric.output_tokens if metric.output_tokens is not None else (len(metric.response.split()) if metric.response else 0)
+    total_cost = metric.total_cost if metric.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
 
     new_metric = LLMMetrics(
         run_id=run_id,
