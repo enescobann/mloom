@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://user:password@localhost:5432/mlflow_db"
+    "postgresql://user:password@localhost:5432/mloom_db"
 )
 
 engine = create_engine(DATABASE_URL)

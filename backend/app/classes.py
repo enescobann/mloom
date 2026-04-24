@@ -44,4 +44,4 @@ class LLMMetrics(Base):
     latency = Column(Integer)
     
     #relation
-    run = relationship("Run", back_populates="llm_data")
+    run = relationship("Run", back_populates="metrics")

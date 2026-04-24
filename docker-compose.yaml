@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d mlflow_db"]
+      test: [ "CMD-SHELL", "pg_isready -U user -d mloom_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,7 +22,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://user:password@db:5432/mlflow_db
+      - DATABASE_URL=postgresql://user:password@db:5432/mloom_db
     depends_on:
       db:
         condition: service_healthy

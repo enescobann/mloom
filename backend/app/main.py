@@ -70,6 +70,9 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
         tags=run.tags,
         latency=run.latency
     )
+    
+    db.add(new_run)
+    db.flush()
 
     for metric_data in run.metrics:
         input_tokens = metric_data.input_tokens if metric_data.input_tokens is not None else (len(metric_data.prompt.split()) if metric_data.prompt else 0)
@@ -77,7 +80,7 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
         total_cost = metric_data.total_cost if metric_data.total_cost is not None else ((input_tokens * 0.00001) + (output_tokens * 0.00003))
 
         new_metric = LLMMetrics(
-            run_id=run.id,
+            run_id=new_run.id,
             model_name=metric_data.model_name,
             prompt=metric_data.prompt,
             response=metric_data.response,

@@ -37,7 +37,8 @@ def patch_openai():
             "response": str(response),
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            # optional: total_cost can be added here or left for backend
+            "latency": int(latency_ms)
+            #maybe costs here later
         }
 
         #if we are inside a @track_run pipeline
@@ -50,11 +51,11 @@ def patch_openai():
             #NOT in a pipeline so pass the metric straight
             payload = {
                 "project_id": config.project_id,
-                "provider": "openai",
+                "tags": {"provider": "openai",},
                 "run_name": "OpenAI API Call",
                 "latency_ms": latency_ms,
                 "metrics": [metric_data]
-            }
+                }
             emit_event(payload)
 
         return response

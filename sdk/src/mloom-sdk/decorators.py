@@ -25,8 +25,7 @@ def track_run(name: str = None, run_type: str = None):
                 result = func(*args, **kwargs)
                 return result
             finally:
-                latency_ms = (time.time() - start_time) * 1000
-
+                latency_ms = int((time.time() - start_time) * 1000)
 
                 collected_metrics = active_run_metrics.get()
                 payload = {
@@ -58,7 +57,7 @@ def track_metric(metric_type: str = "custom_metric"):
             start_time = time.time()
             result = func(*args, **kwargs)
             
-            latency_ms = (time.time() - start_time) * 1000
+            latency_ms = int((time.time() - start_time) * 1000)
 
             current_metrics = active_run_metrics.get()
 

@@ -16,14 +16,13 @@ def _emit_event_sync(_payload: dict):
 
     try:
         url = f"{config.backend_url}/runs/"
-        provider = _payload.get("provider")
 
         payload = {
-            "run_type": "LLM",
+            "run_type": _payload.get("run_type", "LLM"),
             "run_name": _payload.get("run_name", "Unnamed Run"),
             "project_id": config.project_id,
             "latency": _payload.get("latency", _payload.get("latency_ms")),
-            "tags": {"provider": provider} if provider else {},
+            "tags": _payload.get("tags", {}),
             "metrics": _payload.get("metrics", [])
         }
         response = session.post(url, json=payload, timeout=2.0)

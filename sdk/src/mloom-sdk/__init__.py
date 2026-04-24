@@ -1,4 +1,4 @@
-# sdk/src/mlflow_copy/__init__.py
+# sdk/src/mloom/__init__.py
 from .config import init
 from .decorators import track_llm
 from .patcher import patch_openai
