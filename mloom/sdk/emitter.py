@@ -2,7 +2,7 @@ from time import time
 from requests import request, Session
 import requests
 import threading
-from .config import config
+from mloom.core.config import config
 
 session = Session()
 session.headers.update({

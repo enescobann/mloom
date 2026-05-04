@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 
 from sqlalchemy.orm import Session
-from database import engine, get_db
+from mloom.db.database import engine, get_db
 
-from classes import Base, Project, Run, LLMMetrics
-from schemas import (
+from mloom.db.classes import Base, Project, Run, LLMMetrics
+from mloom.server.schemas import (
     ProjectResponse, ProjectCreate,
     RunResponse, RunCreate,
     LLMMetricsResponse, LLMMetricsCreate
@@ -147,4 +147,4 @@ async def delete_llm_metric(run_id: int, metric_id: int, db: Session = Depends(g
     
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("mloom.server.main:app", host="127.0.0.1", port=8000, reload=True)
