@@ -1,6 +1,5 @@
-# sdk/src/mloom/__init__.py
-from .config import init
-from .decorators import track_llm
+from mloom.core.config import init
+from .decorators import track_run as track_llm # alias for backwards compatibility or as per document
 from .patcher import patch_openai
 
 def autotrack():

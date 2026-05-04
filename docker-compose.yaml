@@ -16,7 +16,7 @@ services:
 
   api:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     image: mloom-api:v1
     ports:

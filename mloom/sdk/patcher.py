@@ -2,7 +2,7 @@
 
 import time
 from .emitter import emit_event
-from .config import config
+from mloom.core.config import config
 from .contextvar import active_run_metrics
 
 def patch_openai():

@@ -5,7 +5,7 @@ import time
 import functools
 from .emitter import emit_event
 from .contextvar import active_run_metrics
-from .config import config
+from mloom.core.config import config
 
 def track_run(name: str = None, run_type: str = None):
     """Parent Decorator.
