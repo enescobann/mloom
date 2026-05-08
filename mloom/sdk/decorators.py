@@ -1,76 +1,116 @@
-#I am aiming to provide tools for custom pipelines for developers.
-#Currentyl only will gets run time of the funcs, inputs and outputs.
-
 import time
 import functools
+import asyncio
 from .emitter import emit_event
 from .contextvar import active_run_metrics
 from mloom.core.config import config
 
+def _safe_stringify(obj, max_length=2000):
+    """Utility to safely stringify inputs/outputs without memory blowouts."""
+    try:
+        s = str(obj)
+        return s if len(s) <= max_length else s[:max_length] + "... [TRUNCATED]"
+    except Exception:
+        return "[Unserializable Object]"
+
 def track_run(name: str = None, run_type: str = None):
-    """Parent Decorator.
-    Initalizes the trackinge lements and emits.
-    track_metric decorators needed to capture metrics.
-    """
-
+    """Parent Decorator. Initializes tracking elements and emits."""
+    
     def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
+        run_name = name or func.__name__
 
-            #needs to be initialized before func call to let child decorater store data in it.
-            contextvar_token = active_run_metrics.set([])
-            
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                latency_ms = int((time.time() - start_time) * 1000)
+        # ASYNC WRAPPER
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_time = time.time()
+                contextvar_token = active_run_metrics.set([])
+                try:
+                    return await func(*args, **kwargs)
+                finally:
+                    _finalize_run(start_time, run_name, run_type, contextvar_token)
+            return async_wrapper
 
-                collected_metrics = active_run_metrics.get()
-                payload = {
-                    "project_id": config.project_id,
-                    "run_name": name or func.__name__,
-                    "run_type": run_type,
-                    "latency": latency_ms,
-                    "metrics": collected_metrics
-                }
+        # SYNC WRAPPER
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_time = time.time()
+                contextvar_token = active_run_metrics.set([])
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    _finalize_run(start_time, run_name, run_type, contextvar_token)
+            return sync_wrapper
 
-                emit_event(payload)
-
-                active_run_metrics.reset(contextvar_token)
-
-        return wrapper
     return decorator
 
-def track_metric(metric_type: str = "custom_metric"):
-    """Child Decorator.
-    Measures execution time of the function, catches prompt and 
-    outpu if there is any and stores it on the active_run_metrics.
+def _finalize_run(start_time, run_name, run_type, contextvar_token):
+    """Helper to keep track_run DRY."""
+    latency_ms = int((time.time() - start_time) * 1000)
+    collected_metrics = active_run_metrics.get()
+    
+    payload = {
+        "project_id": config.project_id,
+        "run_name": run_name,
+        "run_type": run_type or "LLM",
+        "latency": latency_ms,
+        "metrics": collected_metrics
+    }
+    emit_event(payload)
+    active_run_metrics.reset(contextvar_token)
 
-    Dont needed on the calls of supported SDKs.
-    """
+
+def track_metric(metric_type: str = "custom_metric"):
+    """Child Decorator. Measures execution time and captures I/O safely."""
 
     def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-            result = func(*args, **kwargs)
-            
-            latency_ms = int((time.time() - start_time) * 1000)
-
-            current_metrics = active_run_metrics.get()
-
+        
+        def _record_metric(start_time, args, kwargs, result=None, error=None):
+            """Helper to format and append the metric data safely."""
+            current_metrics = active_run_metrics.get(None) # Safe fallback if parent isn't active
             if current_metrics is not None:
+                latency_ms = int((time.time() - start_time) * 1000)
+                
+                # Combine args and kwargs safely
+                inputs = {"args": args, "kwargs": kwargs}
+                
+                response_str = f"ERROR: {str(error)}" if error else _safe_stringify(result)
+
                 metric_data = {
                     "model_name": metric_type,
-                    "prompt": str(kwargs),
-                    "response": str(result),
+                    "prompt": _safe_stringify(inputs),
+                    "response": response_str,
                     "latency": latency_ms
                 }
-
                 current_metrics.append(metric_data)
-            
-            return result
-        return wrapper
+
+        # ASYNC WRAPPER
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    _record_metric(start_time, args, kwargs, result=result)
+                    return result
+                except Exception as e:
+                    _record_metric(start_time, args, kwargs, error=e)
+                    raise # Re-raise so we don't break the user's app!
+            return async_wrapper
+
+        # SYNC WRAPPER
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = func(*args, **kwargs)
+                    _record_metric(start_time, args, kwargs, result=result)
+                    return result
+                except Exception as e:
+                    _record_metric(start_time, args, kwargs, error=e)
+                    raise
+            return sync_wrapper
+
     return decorator
