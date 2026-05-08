@@ -8,7 +8,7 @@ class Base(DeclarativeBase):
 
 class Project(Base):
     __tablename__ = "projects"
-    id = Column(Integer, primary_key=True)
+    id = Column(String, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -19,7 +19,7 @@ class Run(Base):
     __tablename__ = "runs"
     id = Column(Integer, primary_key=True)
     run_name = Column(String)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
     run_type = Column(Enum("LLM", "CLASSIC", name="run_type"))
     timestamp = Column(DateTime, server_default=func.now())
     latency = Column(Integer)
