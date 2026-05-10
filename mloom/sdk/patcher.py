@@ -2,6 +2,7 @@ import time
 import functools
 from .emitter import emit_event
 from mloom.core.config import config
+from mloom.sdk.cost import calculate_cost
 from .contextvar import active_run_metrics
 
 def patch_openai():
@@ -51,7 +52,8 @@ def patch_openai():
             "response": response_text,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
-            "latency": latency_ms
+            "latency": latency_ms,
+            "total_cost": calculate_cost(model, input_tokens, output_tokens)
         }
 
         # Safely check ContextVar (Must use .get(None) to avoid LookupError)
