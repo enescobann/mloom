@@ -1,7 +1,10 @@
+from datetime import UTC
+from openai.types.chat import chat_completion_audio_param
+from asyncio import protocols
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, JSON, DateTime, Enum, func
 from sqlalchemy.orm import relationship, DeclarativeBase
 
-import datetime
+from datetime import datetime, timezone
 
 class Base(DeclarativeBase):
     pass
@@ -21,6 +24,8 @@ class Run(Base):
     run_name = Column(String)
     project_id = Column(String, ForeignKey("projects.id"), nullable=False)
     run_type = Column(Enum("LLM", "CLASSIC", name="run_type"))
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
     timestamp = Column(DateTime, server_default=func.now())
     latency = Column(Integer)
 
@@ -42,6 +47,10 @@ class LLMMetrics(Base):
     output_tokens = Column(Integer)
     total_cost = Column(Float)
     latency = Column(Integer)
-    
+
+    timestamp = Column(DateTime, server_default=datetime.now(timezone.utc))
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+
     #relation
     run = relationship("Run", back_populates="metrics")
