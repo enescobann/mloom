@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import time
 import functools
 import asyncio
@@ -47,7 +48,9 @@ def track_run(name: str = None, run_type: str = None):
 
 def _finalize_run(start_time, run_name, run_type, contextvar_token):
     """Helper to keep track_run DRY."""
-    latency_ms = int((time.time() - start_time) * 1000)
+    end_time_utc = datetime.now(timezone.utc)
+    start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
+    latency_ms = int((end_time_utc - start_time_utc).total_seconds() * 1000)
     collected_metrics = active_run_metrics.get()
     
     payload = {
@@ -55,7 +58,10 @@ def _finalize_run(start_time, run_name, run_type, contextvar_token):
         "run_name": run_name,
         "run_type": run_type or "LLM",
         "latency": latency_ms,
-        "metrics": collected_metrics
+        "metrics": collected_metrics,
+        "start_time": start_time_utc.isoformat(),
+        "end_time": end_time_utc.isoformat()
+
     }
     emit_event(payload)
     active_run_metrics.reset(contextvar_token)
@@ -70,7 +76,9 @@ def track_metric(metric_type: str = "custom_metric"):
             """Helper to format and append the metric data safely."""
             current_metrics = active_run_metrics.get(None) # Safe fallback if parent isn't active
             if current_metrics is not None:
-                latency_ms = int((time.time() - start_time) * 1000)
+                end_time_utc = datetime.now(timezone.utc)
+                start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
+                latency_ms = int((end_time_utc - start_time_utc).total_seconds() * 1000)
                 
                 # Combine args and kwargs safely
                 inputs = {"args": args, "kwargs": kwargs}
@@ -81,7 +89,9 @@ def track_metric(metric_type: str = "custom_metric"):
                     "model_name": metric_type,
                     "prompt": _safe_stringify(inputs),
                     "response": response_str,
-                    "latency": latency_ms
+                    "latency": latency_ms,
+                    "start_time": start_time_utc.isoformat(),
+                    "end_time": end_time_utc.isoformat()
                 }
                 current_metrics.append(metric_data)
 

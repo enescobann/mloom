@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import time
 import functools
 from .emitter import emit_event
@@ -25,7 +26,9 @@ def patch_openai():
 
     def _record_telemetry(start_time, kwargs, response=None, error=None):
         """Centralized logic to format and send the metric."""
-        latency_ms = int((time.time() - start_time) * 1000)
+        end_time_utc = datetime.now(timezone.utc)
+        start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
+        latency_ms = int((end_time_utc - start_time_utc).total_seconds() * 1000)
         
         input_tokens, output_tokens = 0, 0
         
@@ -52,6 +55,8 @@ def patch_openai():
             "response": response_text,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "start_time": start_time_utc.isoformat(),
+            "end_time": end_time_utc.isoformat(),
             "latency": latency_ms,
             "total_cost": calculate_cost(model, input_tokens, output_tokens)
         }
