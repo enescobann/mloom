@@ -31,6 +31,8 @@ class RunBase(BaseModel):
     run_type: RunTypeEnum
     tags: dict[str, Any] | None = None
     latency: int | None = None
+    error_trace: dict | None = None
+    call_site: dict | None = None
 
 class RunCreate(RunBase):
     project_id: int

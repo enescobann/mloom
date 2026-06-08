@@ -9,6 +9,7 @@ from mloom.server.schemas import (
     RunResponse, RunCreate,
     LLMMetricsResponse, LLMMetricsCreate
 )
+from mloom.server.trace_logger import log_run_trace
 
 Base.metadata.create_all(bind=engine)
 
@@ -68,7 +69,9 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
         run_type=run.run_type.value,
         run_name=run.run_name,
         tags=run.tags,
-        latency=run.latency
+        latency=run.latency,
+        error_trace=run.error_trace,
+        call_site=run.call_site,
     )
     
     db.add(new_run)
@@ -95,6 +98,9 @@ async def create_run(run: RunCreate, db: Session = Depends(get_db)):
     db.add(new_run)
     db.commit()
     db.refresh(new_run)
+
+    # Live trace output to server terminal
+    log_run_trace(new_run)
 
     return new_run
 

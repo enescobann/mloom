@@ -43,7 +43,9 @@ def _emit_event_sync(_payload: dict):
                     project_id=config.project_id,
                     run_type=_payload.get("run_type", "LLM"),
                     latency=_payload.get("latency", _payload.get("latency_ms")),
-                    tags=_payload.get("tags", {})
+                    tags=_payload.get("tags", {}),
+                    error_trace=_payload.get("error_trace"),
+                    call_site=_payload.get("call_site"),
                 )
                 db.add(new_run)
                 db.commit()
@@ -67,6 +69,10 @@ def _emit_event_sync(_payload: dict):
                     db.add_all(metrics_to_add)
                     db.commit()
 
+                # Live trace output to terminal
+                from mloom.server.trace_logger import log_run_trace
+                log_run_trace(new_run)
+
         else:
             if not config.backend_url:
                 print("[Mloom Warning]: `backend_url` is not set in remote mode.")
@@ -79,7 +85,9 @@ def _emit_event_sync(_payload: dict):
                 "project_id": config.project_id,
                 "latency": _payload.get("latency", _payload.get("latency_ms")),
                 "tags": _payload.get("tags", {}),
-                "metrics": _payload.get("metrics", [])
+                "metrics": _payload.get("metrics", []),
+                "error_trace": _payload.get("error_trace"),
+                "call_site": _payload.get("call_site"),
             }
             # The session handles connection pooling automatically
             response = session.post(url, json=payload, timeout=2.0)

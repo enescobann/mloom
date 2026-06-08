@@ -30,6 +30,8 @@ class Run(Base):
     latency = Column(Integer)
 
     tags = Column(JSON)
+    error_trace = Column(JSON, nullable=True)
+    call_site = Column(JSON, nullable=True)
 
     #relation
     project = relationship("Project", back_populates="runs")
@@ -48,7 +50,7 @@ class LLMMetrics(Base):
     total_cost = Column(Float)
     latency = Column(Integer)
 
-    timestamp = Column(DateTime, server_default=datetime.now(timezone.utc))
+    timestamp = Column(DateTime, server_default=func.now())
     start_time = Column(DateTime)
     end_time = Column(DateTime)
 

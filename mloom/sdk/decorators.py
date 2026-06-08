@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+import sys
 import time
 import functools
 import asyncio
 from .emitter import emit_event
 from .contextvar import active_run_metrics
+from .trace import capture_exception_context, capture_call_site
 from mloom.core.config import config
 
 def _safe_stringify(obj, max_length=2000):
@@ -26,10 +28,16 @@ def track_run(name: str = None, run_type: str = None):
             async def async_wrapper(*args, **kwargs):
                 start_time = time.time()
                 contextvar_token = active_run_metrics.set([])
+                call_site = capture_call_site(skip_frames=2)
+                error_trace = None
                 try:
                     return await func(*args, **kwargs)
+                except Exception as e:
+                    error_trace = capture_exception_context(e, sys.exc_info()[2])
+                    raise
                 finally:
-                    _finalize_run(start_time, run_name, run_type, contextvar_token)
+                    _finalize_run(start_time, run_name, run_type, contextvar_token,
+                                  error_trace=error_trace, call_site=call_site)
             return async_wrapper
 
         # SYNC WRAPPER
@@ -38,15 +46,22 @@ def track_run(name: str = None, run_type: str = None):
             def sync_wrapper(*args, **kwargs):
                 start_time = time.time()
                 contextvar_token = active_run_metrics.set([])
+                call_site = capture_call_site(skip_frames=2)
+                error_trace = None
                 try:
                     return func(*args, **kwargs)
+                except Exception as e:
+                    error_trace = capture_exception_context(e, sys.exc_info()[2])
+                    raise
                 finally:
-                    _finalize_run(start_time, run_name, run_type, contextvar_token)
+                    _finalize_run(start_time, run_name, run_type, contextvar_token,
+                                  error_trace=error_trace, call_site=call_site)
             return sync_wrapper
 
     return decorator
 
-def _finalize_run(start_time, run_name, run_type, contextvar_token):
+def _finalize_run(start_time, run_name, run_type, contextvar_token,
+                  error_trace=None, call_site=None):
     """Helper to keep track_run DRY."""
     end_time_utc = datetime.now(timezone.utc)
     start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
@@ -60,7 +75,9 @@ def _finalize_run(start_time, run_name, run_type, contextvar_token):
         "latency": latency_ms,
         "metrics": collected_metrics,
         "start_time": start_time_utc.isoformat(),
-        "end_time": end_time_utc.isoformat()
+        "end_time": end_time_utc.isoformat(),
+        "error_trace": error_trace,
+        "call_site": call_site,
 
     }
     emit_event(payload)
@@ -93,6 +110,13 @@ def track_metric(metric_type: str = "custom_metric"):
                     "start_time": start_time_utc.isoformat(),
                     "end_time": end_time_utc.isoformat()
                 }
+
+                # Enrich with structured trace on error
+                if error:
+                    metric_data["error_trace"] = capture_exception_context(
+                        error, error.__traceback__
+                    )
+
                 current_metrics.append(metric_data)
 
         # ASYNC WRAPPER
