@@ -1,129 +1,188 @@
-import threading
-import queue
 import atexit
+import os
+import queue
+import sys
+import threading
+import time
+from typing import Optional
+
 from requests import Session
 from mloom.core.config import config
 
-# 1. Setup a global session
-session = Session()
-session.headers.update({"Content-Type": "application/json"})
+_QUEUE_MAXSIZE = 10000
+_REMOTE_TIMEOUT = 2.0
+_STOP = object()
+
+
+def _new_session() -> Session:
+    s = Session()
+    s.headers.update({"Content-Type": "application/json"})
+    return s
+
+
+# 1. Setup a global session (only ever used from the worker thread)
+session = _new_session()
 
 # 2. Create a thread-safe Queue (maxsize prevents memory leaks if backend is down)
-_event_queue = queue.Queue(maxsize=10000)
+_event_queue = queue.Queue(maxsize=_QUEUE_MAXSIZE)
 
-# 3. Cache to avoid repeated DB calls in local mode
-_project_verified = False 
+# 3. The worker thread is started lazily on the first event.
+_worker_thread: Optional[threading.Thread] = None
+_worker_lock = threading.Lock()
+_shutting_down = False
+
+
+def _warn(message: str):
+    print(message, file=sys.stderr)
+
+
+def _emit_local(payload: dict, project_id: str):
+    # Lazy imports: SQLAlchemy is only needed once something is recorded locally.
+    from mloom.db import database
+    from mloom.db.crud import create_run_record
+    from mloom.server.trace_logger import log_run_trace
+
+    if database.engine is None:
+        database.init_db(config.local_db_url)
+
+    with database.get_session() as db:
+        new_run = create_run_record(db, {**payload, "project_id": project_id})
+        # Live trace output to terminal
+        log_run_trace(new_run)
+
+
+def _emit_remote(payload: dict, project_id: str):
+    if not config.backend_url:
+        _warn("[Mloom Warning]: `backend_url` is not set in remote mode.")
+        return
+
+    url = f"{config.backend_url.rstrip('/')}/runs/"
+    body = {
+        "run_type": payload.get("run_type") or "LLM",
+        "run_name": payload.get("run_name") or "Unnamed Run",
+        "project_id": project_id,
+        "latency": payload.get("latency", payload.get("latency_ms")),
+        "tags": payload.get("tags") or {},
+        "metrics": payload.get("metrics") or [],
+        "error_trace": payload.get("error_trace"),
+        "call_site": payload.get("call_site"),
+        "start_time": payload.get("start_time"),
+        "end_time": payload.get("end_time"),
+    }
+    # The session handles connection pooling automatically
+    response = session.post(url, json=body, timeout=_REMOTE_TIMEOUT)
+    response.raise_for_status()
+
 
 def _emit_event_sync(_payload: dict):
     """Actual emitter and error handler."""
-    global _project_verified
-    
-    if not config.project_id:
-        print("[Mloom Warning]: `project_id` is not set. Event not recorded.")
+    project_id = _payload.get("project_id") or config.project_id
+    if not project_id:
+        _warn("[Mloom Warning]: `project_id` is not set. Event not recorded.")
         return
 
     try:
         if config.mode == "local":
-            # Lazy imports
-            from mloom.db.database import SessionLocal
-            from mloom.db.classes import Run, LLMMetrics, Project
-            
-            with SessionLocal() as db:
-                # Cache project check so we don't query it on every single run
-                if not _project_verified:
-                    proj = db.query(Project).filter_by(id=config.project_id).first()
-                    if not proj:
-                        proj = Project(id=config.project_id, name=f"Project_{config.project_id}")
-                        db.add(proj)
-                        db.commit()
-                    _project_verified = True
-
-                new_run = Run(
-                    run_name=_payload.get("run_name", "Unnamed Run"),
-                    project_id=config.project_id,
-                    run_type=_payload.get("run_type", "LLM"),
-                    latency=_payload.get("latency", _payload.get("latency_ms")),
-                    tags=_payload.get("tags", {}),
-                    error_trace=_payload.get("error_trace"),
-                    call_site=_payload.get("call_site"),
-                )
-                db.add(new_run)
-                db.commit()
-                db.refresh(new_run)
-
-                metrics_to_add = []
-                for metric_data in _payload.get("metrics", []):
-                    metrics_to_add.append(LLMMetrics(
-                        run_id=new_run.id,
-                        model_name=metric_data.get("model_name"),
-                        prompt=metric_data.get("prompt"),
-                        response=metric_data.get("response"),
-                        input_tokens=metric_data.get("input_tokens"),
-                        output_tokens=metric_data.get("output_tokens"),
-                        latency=metric_data.get("latency"),
-                        total_cost=metric_data.get("total_cost")
-                    ))
-                
-                # Bulk save metrics instead of committing one by one
-                if metrics_to_add:
-                    db.add_all(metrics_to_add)
-                    db.commit()
-
-                # Live trace output to terminal
-                from mloom.server.trace_logger import log_run_trace
-                log_run_trace(new_run)
-
+            _emit_local(_payload, str(project_id))
         else:
-            if not config.backend_url:
-                print("[Mloom Warning]: `backend_url` is not set in remote mode.")
-                return
-            
-            url = f"{config.backend_url}/runs/"
-            payload = {
-                "run_type": _payload.get("run_type", "LLM"),
-                "run_name": _payload.get("run_name", "Unnamed Run"),
-                "project_id": config.project_id,
-                "latency": _payload.get("latency", _payload.get("latency_ms")),
-                "tags": _payload.get("tags", {}),
-                "metrics": _payload.get("metrics", []),
-                "error_trace": _payload.get("error_trace"),
-                "call_site": _payload.get("call_site"),
-            }
-            # The session handles connection pooling automatically
-            response = session.post(url, json=payload, timeout=2.0)
-            response.raise_for_status()
-
+            _emit_remote(_payload, str(project_id))
     except Exception as e:
-        print(f"[Mloom Error]: Failed to emit event. Reason: {e}")
+        _warn(f"[Mloom Error]: Failed to emit event. Reason: {e}")
 
-def _worker_loop():
+
+def _worker_loop(event_queue: queue.Queue):
     """Background thread loop that processes events from the queue."""
     while True:
-        payload = _event_queue.get()
-        if payload is None:  # Sentinel value indicating shutdown
-            _event_queue.task_done()
-            break
-            
-        _emit_event_sync(payload)
-        _event_queue.task_done()
+        payload = event_queue.get()
+        try:
+            if payload is _STOP:
+                return
+            _emit_event_sync(payload)
+        finally:
+            event_queue.task_done()
 
-# 4. Start the single background worker thread
-_worker_thread = threading.Thread(target=_worker_loop, daemon=True)
-_worker_thread.start()
+
+def _ensure_worker():
+    global _worker_thread
+    if _worker_thread is not None and _worker_thread.is_alive():
+        return
+    with _worker_lock:
+        if _worker_thread is None or not _worker_thread.is_alive():
+            _worker_thread = threading.Thread(
+                target=_worker_loop, args=(_event_queue,), name="mloom-emitter", daemon=True
+            )
+            _worker_thread.start()
+
 
 def emit_event(payload: dict):
     """Puts the event in the queue. Almost instantaneous."""
+    if _shutting_down:
+        # The worker is gone once the interpreter is exiting; write inline instead.
+        _emit_event_sync(payload)
+        return
+
+    _ensure_worker()
     try:
         # put_nowait ensures the main application thread NEVER blocks
         _event_queue.put_nowait(payload)
     except queue.Full:
-        print("[Mloom Error]: Telemetry queue is full. Event dropped.")
+        _warn("[Mloom Error]: Telemetry queue is full. Event dropped.")
 
-# 5. Graceful shutdown to prevent data loss
-def flush_events():
-    """Ensures all pending events are sent before the program exits."""
-    if _worker_thread.is_alive():
-        _event_queue.put(None)  # Send shutdown signal
-        _worker_thread.join(timeout=3.0)  # Wait up to 3 seconds for queue to drain
 
-atexit.register(flush_events)
+def flush(timeout: Optional[float] = None) -> bool:
+    """
+    Block until every queued event has been written.
+
+    Returns False if `timeout` (seconds) expired first. The worker keeps
+    running afterwards, so flush() can be called any number of times.
+    """
+    if threading.current_thread() is _worker_thread:
+        return False
+
+    event_queue = _event_queue
+    deadline = None if timeout is None else time.monotonic() + timeout
+    with event_queue.all_tasks_done:
+        if event_queue.unfinished_tasks and not _shutting_down:
+            _ensure_worker()
+        while event_queue.unfinished_tasks:
+            if deadline is None:
+                event_queue.all_tasks_done.wait()
+            else:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                event_queue.all_tasks_done.wait(remaining)
+    return True
+
+
+def flush_events(timeout: Optional[float] = None) -> bool:
+    """Backwards-compatible alias for flush()."""
+    return flush(timeout)
+
+
+# 4. Graceful shutdown to prevent data loss
+def _shutdown():
+    global _shutting_down
+    flush(timeout=5.0)
+    _shutting_down = True
+    worker = _worker_thread
+    if worker is not None and worker.is_alive():
+        try:
+            _event_queue.put_nowait(_STOP)
+        except queue.Full:
+            return
+        worker.join(timeout=1.0)
+
+
+def _reset_after_fork():
+    # Threads, locks and pooled sockets do not survive fork(); start clean in the child.
+    global _event_queue, _worker_thread, _worker_lock, session
+    _event_queue = queue.Queue(maxsize=_QUEUE_MAXSIZE)
+    _worker_thread = None
+    _worker_lock = threading.Lock()
+    session = _new_session()
+
+
+atexit.register(_shutdown)
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_after_fork)
