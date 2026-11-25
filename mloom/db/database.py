@@ -2,7 +2,7 @@ import os
 import threading
 from typing import Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -33,13 +33,32 @@ def server_db_url() -> str:
     return f"sqlite:///{config.CONFIG_DIR / 'server.db'}"
 
 
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+
+def _set_sqlite_pragmas(dbapi_connection, _connection_record):
+    # WAL lets the dashboard read while the SDK writes; busy_timeout makes
+    # concurrent writers (several scripts, server + SDK) wait instead of failing.
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    finally:
+        cursor.close()
+
+
 def _create_engine(url: str):
     if make_url(url).get_backend_name() == "sqlite":
         kwargs = {"connect_args": {"check_same_thread": False}}
-        if make_url(url).database in (None, "", ":memory:"):
+        in_memory = make_url(url).database in (None, "", ":memory:")
+        if in_memory:
             # A single shared connection, otherwise every session sees an empty DB.
             kwargs["poolclass"] = StaticPool
-        return create_engine(url, **kwargs)
+        new_engine = create_engine(url, **kwargs)
+        if not in_memory:
+            event.listen(new_engine, "connect", _set_sqlite_pragmas)
+        return new_engine
 
     return create_engine(
         url,

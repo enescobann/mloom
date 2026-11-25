@@ -300,3 +300,12 @@ def test_remote_mode_posts_runs_to_server(monkeypatch, tmp_path):
     assert run["call_site"]["caller_function"] == "test_remote_mode_posts_runs_to_server"
     assert [m["model_name"] for m in run["metrics"]] == ["step"]
     assert run["metrics"][0]["start_time"] is not None
+
+
+def test_sqlite_file_databases_use_wal(tmp_path):
+    from sqlalchemy import text
+
+    engine = database.init_db(f"sqlite:///{tmp_path / 'wal.db'}")
+    with engine.connect() as conn:
+        assert conn.execute(text("PRAGMA journal_mode")).scalar() == "wal"
+        assert conn.execute(text("PRAGMA busy_timeout")).scalar() == database.SQLITE_BUSY_TIMEOUT_MS
