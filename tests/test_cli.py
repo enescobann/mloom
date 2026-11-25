@@ -181,13 +181,17 @@ def test_ui_launches_streamlit(runner, monkeypatch):
     calls = []
     monkeypatch.setattr(cli_module.subprocess, "call", lambda cmd: calls.append(cmd) or 0)
 
-    result = runner.invoke(cli, ["ui", "--port", "8600"])
+    result = runner.invoke(cli, ["ui", "--port", "8600", "--no-open"])
 
     assert result.exit_code == 0, result.output
     [cmd] = calls
     assert cmd[:4] == [sys.executable, "-m", "streamlit", "run"]
     assert cmd[4].endswith("ui/app.py")
-    assert cmd[5:] == ["--server.port", "8600"]
+    assert cmd[5:] == [
+        "--server.port", "8600",
+        "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
+    ]
 
 
 def test_server_start_runs_uvicorn(runner, monkeypatch):

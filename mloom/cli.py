@@ -134,12 +134,21 @@ def _truncate(text: str, width: int) -> str:
 # ─── Commands ──────────────────────────────────────────────────────────
 
 @cli.command("ui")
-@click.option("--port", type=int, default=None, help="Port for the Streamlit server.")
-def ui(port):
+@click.option("--port", type=int, default=8501, show_default=True, help="Port for the Streamlit server.")
+@click.option("--open/--no-open", "open_browser", default=True, help="Open the dashboard in a browser.")
+def ui(port, open_browser):
     """Launch the local dashboard (Streamlit)."""
-    cmd = [sys.executable, "-m", "streamlit", "run", str(UI_APP_PATH)]
-    if port:
-        cmd += ["--server.port", str(port)]
+    # Headless skips Streamlit's first-run email prompt; usage statistics stay off for a local-first tool.
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(UI_APP_PATH),
+        "--server.port", str(port),
+        "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
+    ]
+    if open_browser:
+        import threading
+        import webbrowser
+        threading.Timer(1.5, webbrowser.open, args=(f"http://localhost:{port}",)).start()
     try:
         sys.exit(subprocess.call(cmd))
     except KeyboardInterrupt:
