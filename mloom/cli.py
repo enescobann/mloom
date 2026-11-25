@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 from mloom.core.config import config
+from mloom.core.paths import display_path
 
 UI_APP_PATH = Path(__file__).parent / "ui" / "app.py"
 _REMOTE_TIMEOUT = 5.0
@@ -12,7 +13,7 @@ _REMOTE_TIMEOUT = 5.0
 
 @click.group()
 def cli():
-    """Mloom CLI: The Local-First LLMOps Platform"""
+    """mloom: a local-first debugger for LLM pipelines."""
     pass
 
 
@@ -293,7 +294,7 @@ def trace(run_id: int):
     if call_site:
         click.echo()
         click.secho("Call Site:", bold=True)
-        caller_file = call_site.get("caller_file", "?")
+        caller_file = display_path(call_site.get("caller_file", "?"))
         caller_line = call_site.get("caller_line", "?")
         caller_func = call_site.get("caller_function", "?")
         click.echo(f'  File "{caller_file}", line {caller_line}, in {caller_func}()')
@@ -315,7 +316,7 @@ def trace(run_id: int):
         click.echo()
         click.secho("Stack Trace:", bold=True)
         for frame in visible:
-            filename = frame.get("filename", "?")
+            filename = display_path(frame.get("filename", "?"))
             lineno = frame.get("lineno", "?")
             function = frame.get("function", "?")
             code_line = frame.get("code_line", "").strip()

@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from mloom.core.config import config
+from mloom.core.paths import display_path
 from mloom.sdk.trace import is_internal_frame
 from mloom.ui import data
 
@@ -85,19 +86,6 @@ def fmt_cost(value) -> str:
     if value == 0 or value >= 0.01:
         return f"${value:,.4f}"
     return f"${value:,.5f}"
-
-
-def display_path(path) -> str:
-    """Show paths relative to the working directory, or with the home directory as ~."""
-    if not path or path == "?":
-        return path or "?"
-    p = Path(str(path))
-    for base, prefix in ((Path.cwd(), ""), (Path.home(), "~/")):
-        try:
-            return prefix + str(p.relative_to(base))
-        except ValueError:
-            continue
-    return str(path)
 
 
 def fmt_time(value) -> str:
