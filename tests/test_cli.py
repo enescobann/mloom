@@ -159,7 +159,7 @@ def test_trace_shows_failure_details(runner, local_project):
     assert "(1 internal mloom frame hidden)" in stack
     assert "secret_token = [REDACTED]" in out
     assert "attempts = 2" in out
-    assert "tok-123" not in out.split("Local Variables:")[1]
+    assert "tok-123" not in out
 
 
 def test_trace_successful_run(runner, local_project):
