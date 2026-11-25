@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import sys
 import time
 import functools
-import asyncio
+import inspect
 from .emitter import emit_event
 from .contextvar import active_run_metrics
 from .trace import capture_exception_context, capture_call_site
@@ -16,14 +16,27 @@ def _safe_stringify(obj, max_length=2000):
     except Exception:
         return "[Unserializable Object]"
 
+def _safe_capture(exc, tb):
+    """Never let trace capture replace the user's exception."""
+    try:
+        return capture_exception_context(exc, tb)
+    except Exception:
+        return {"error_type": type(exc).__name__, "error_message": _safe_stringify(exc)}
+
 def track_run(name: str = None, run_type: str = None):
-    """Parent Decorator. Initializes tracking elements and emits."""
-    
+    """
+    Parent Decorator. Initializes tracking elements and emits.
+
+    Usable both as @track_run and as @track_run(name="...", run_type="...").
+    """
+    if callable(name):
+        return track_run()(name)
+
     def decorator(func):
         run_name = name or func.__name__
 
         # ASYNC WRAPPER
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
                 start_time = time.time()
@@ -33,7 +46,7 @@ def track_run(name: str = None, run_type: str = None):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as e:
-                    error_trace = capture_exception_context(e, sys.exc_info()[2])
+                    error_trace = _safe_capture(e, sys.exc_info()[2])
                     raise
                 finally:
                     _finalize_run(start_time, run_name, run_type, contextvar_token,
@@ -51,7 +64,7 @@ def track_run(name: str = None, run_type: str = None):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    error_trace = capture_exception_context(e, sys.exc_info()[2])
+                    error_trace = _safe_capture(e, sys.exc_info()[2])
                     raise
                 finally:
                     _finalize_run(start_time, run_name, run_type, contextvar_token,
@@ -66,8 +79,10 @@ def _finalize_run(start_time, run_name, run_type, contextvar_token,
     end_time_utc = datetime.now(timezone.utc)
     start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
     latency_ms = int((end_time_utc - start_time_utc).total_seconds() * 1000)
-    collected_metrics = active_run_metrics.get()
-    
+    # Copy so late appends from threads that inherited the context can't race the emitter.
+    collected_metrics = list(active_run_metrics.get() or [])
+    active_run_metrics.reset(contextvar_token)
+
     payload = {
         "project_id": config.project_id,
         "run_name": run_name,
@@ -81,14 +96,19 @@ def _finalize_run(start_time, run_name, run_type, contextvar_token,
 
     }
     emit_event(payload)
-    active_run_metrics.reset(contextvar_token)
 
 
 def track_metric(metric_type: str = "custom_metric"):
-    """Child Decorator. Measures execution time and captures I/O safely."""
+    """
+    Child Decorator. Measures execution time and captures I/O safely.
+
+    Usable both as @track_metric and as @track_metric("retrieval").
+    """
+    if callable(metric_type):
+        return track_metric()(metric_type)
 
     def decorator(func):
-        
+
         def _record_metric(start_time, args, kwargs, result=None, error=None):
             """Helper to format and append the metric data safely."""
             current_metrics = active_run_metrics.get(None) # Safe fallback if parent isn't active
@@ -96,10 +116,10 @@ def track_metric(metric_type: str = "custom_metric"):
                 end_time_utc = datetime.now(timezone.utc)
                 start_time_utc = datetime.fromtimestamp(start_time, tz=timezone.utc)
                 latency_ms = int((end_time_utc - start_time_utc).total_seconds() * 1000)
-                
+
                 # Combine args and kwargs safely
                 inputs = {"args": args, "kwargs": kwargs}
-                
+
                 response_str = f"ERROR: {str(error)}" if error else _safe_stringify(result)
 
                 metric_data = {
@@ -113,24 +133,22 @@ def track_metric(metric_type: str = "custom_metric"):
 
                 # Enrich with structured trace on error
                 if error:
-                    metric_data["error_trace"] = capture_exception_context(
-                        error, error.__traceback__
-                    )
+                    metric_data["error_trace"] = _safe_capture(error, error.__traceback__)
 
                 current_metrics.append(metric_data)
 
         # ASYNC WRAPPER
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
                 start_time = time.time()
                 try:
                     result = await func(*args, **kwargs)
-                    _record_metric(start_time, args, kwargs, result=result)
-                    return result
                 except Exception as e:
                     _record_metric(start_time, args, kwargs, error=e)
                     raise # Re-raise so we don't break the user's app!
+                _record_metric(start_time, args, kwargs, result=result)
+                return result
             return async_wrapper
 
         # SYNC WRAPPER
@@ -140,11 +158,11 @@ def track_metric(metric_type: str = "custom_metric"):
                 start_time = time.time()
                 try:
                     result = func(*args, **kwargs)
-                    _record_metric(start_time, args, kwargs, result=result)
-                    return result
                 except Exception as e:
                     _record_metric(start_time, args, kwargs, error=e)
                     raise
+                _record_metric(start_time, args, kwargs, result=result)
+                return result
             return sync_wrapper
 
     return decorator
