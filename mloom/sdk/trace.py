@@ -2,12 +2,11 @@
 Trace capture module for Mloom SDK.
 
 Provides structured exception context and call-site provenance
-using Python's `traceback` and `inspect` modules.
+using Python's `traceback` module and frame objects.
 """
 
 import sys
 import traceback
-import inspect
 import linecache
 from fnmatch import fnmatch
 
@@ -200,8 +199,10 @@ def capture_call_site(skip_frames: int = 2) -> dict | None:
     """
     Capture the call site of the decorated function.
 
-    Uses inspect.stack() to find the caller's file, line, and function name,
-    skipping internal decorator/wrapper frames.
+    Walks frame objects directly to find the caller's file, line, and function
+    name, skipping internal decorator/wrapper frames. inspect.stack() is not
+    used because it reads source lines for every frame on the stack, which
+    made each decorated call noticeably slower.
 
     Args:
         skip_frames: Number of internal frames to skip to reach the user's
@@ -211,21 +212,17 @@ def capture_call_site(skip_frames: int = 2) -> dict | None:
         A minimal dict with caller_file, caller_line, caller_function,
         or None if the stack can't be inspected.
     """
+    frame = None
     try:
-        stack = inspect.stack()
-        # Guard against unexpectedly shallow stacks
-        if len(stack) <= skip_frames:
-            return None
-
-        frame_info = stack[skip_frames]
+        # Guard against unexpectedly shallow stacks (raises ValueError)
+        frame = sys._getframe(skip_frames)
         return {
-            "caller_file": frame_info.filename,
-            "caller_line": frame_info.lineno,
-            "caller_function": frame_info.function,
+            "caller_file": frame.f_code.co_filename,
+            "caller_line": frame.f_lineno,
+            "caller_function": frame.f_code.co_name,
         }
     except Exception:
-        # inspect.stack() can fail in some edge cases (frozen modules, etc.)
         return None
     finally:
         # Avoid reference cycles from holding frame objects
-        del stack
+        del frame
