@@ -73,14 +73,30 @@ def fmt_int(value) -> str:
 def fmt_ms(value) -> str:
     if value is None or pd.isna(value):
         return "-"
-    return f"{float(value):,.0f} ms"
+    value = float(value)
+    if value >= 1000:
+        return f"{value / 1000:,.2f} s"
+    return f"{value:,.0f} ms"
 
 
 def fmt_cost(value) -> str:
     value = float(value or 0.0)
     if value == 0 or value >= 0.01:
         return f"${value:,.4f}"
-    return f"${value:,.6f}"
+    return f"${value:,.5f}"
+
+
+def display_path(path) -> str:
+    """Show paths relative to the working directory, or with the home directory as ~."""
+    if not path or path == "?":
+        return path or "?"
+    p = Path(str(path))
+    for base, prefix in ((Path.cwd(), ""), (Path.home(), "~/")):
+        try:
+            return prefix + str(p.relative_to(base))
+        except ValueError:
+            continue
+    return str(path)
 
 
 def fmt_time(value) -> str:
@@ -136,7 +152,7 @@ def render_empty_state(db_path: Path):
     st.info("No runs recorded yet.")
     st.markdown("Track a function, run your script, then press **Refresh data**:")
     st.code(QUICKSTART_SNIPPET, language="python")
-    st.caption(f"Runs are stored in {db_path}.")
+    st.caption(f"Runs are stored in {display_path(db_path)}.")
 
 
 # ─── Overview ──────────────────────────────────────────────────────────
@@ -326,7 +342,7 @@ def render_error(error_trace: dict):
     traceback_text = error_trace.get("traceback_formatted")
     if not traceback_text and frames:
         traceback_text = "\n".join(
-            f'File "{f.get("filename", "?")}", line {f.get("lineno", "?")}, in {f.get("function", "?")}\n'
+            f'File "{display_path(f.get("filename", "?"))}", line {f.get("lineno", "?")}, in {f.get("function", "?")}\n'
             f'    {f.get("code_line", "").strip()}'
             for f in frames
         )
@@ -425,7 +441,7 @@ def render_run_detail(detail: dict):
     if call_site:
         st.markdown("**Call site**")
         st.code(
-            f'File "{call_site.get("caller_file", "?")}", line {call_site.get("caller_line", "?")}, '
+            f'File "{display_path(call_site.get("caller_file", "?"))}", line {call_site.get("caller_line", "?")}, '
             f'in {call_site.get("caller_function", "?")}()',
             language=None,
         )
@@ -481,7 +497,7 @@ def main():
 
     with st.sidebar:
         st.title("mloom")
-        st.caption("Local LLM run tracking")
+        st.caption("Local-first debugger for LLM pipelines")
         if st.button("Refresh data"):
             st.cache_data.clear()
 
@@ -500,7 +516,7 @@ def main():
         status = st.radio("Status", STATUS_FILTERS, horizontal=True, key="filter_status")
         search = st.text_input("Run name", placeholder="Search by name", key="filter_search").strip()
         st.divider()
-        st.caption(f"Database: {db_path}")
+        st.caption(f"Database: {display_path(db_path)}")
         st.caption(f"Data is cached for {CACHE_TTL_SECONDS} s. Times are shown in local time.")
 
     view = apply_filters(runs, project, status, search)

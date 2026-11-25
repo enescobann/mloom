@@ -191,6 +191,7 @@ def test_ui_launches_streamlit(runner, monkeypatch):
         "--server.port", "8600",
         "--server.headless", "true",
         "--browser.gatherUsageStats", "false",
+        "--client.toolbarMode", "minimal",
     ]
 
 

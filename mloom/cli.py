@@ -144,6 +144,7 @@ def ui(port, open_browser):
         "--server.port", str(port),
         "--server.headless", "true",
         "--browser.gatherUsageStats", "false",
+        "--client.toolbarMode", "minimal",
     ]
     if open_browser:
         import threading

@@ -137,7 +137,7 @@ def test_overview_kpis_and_charts(populated):
         "p50 latency": kpis["p50 latency"],
         "p95 latency": kpis["p95 latency"],
     }
-    assert kpis["p50 latency"].endswith(" ms") and kpis["p95 latency"].endswith(" ms")
+    assert all(kpis[k].endswith((" ms", " s")) for k in ("p50 latency", "p95 latency"))
     # Runs over time, latency distribution, tokens by model, cost by model.
     assert len(charts(at)) == 4
 
@@ -206,7 +206,7 @@ def test_run_detail_ok_run(populated):
     assert detail_kpis["Steps"] == "1"
     assert detail_kpis["Tokens"] == "1,500"
 
-    assert [e.label for e in at.expander] == ["1. retrieve · 30 ms", "2. gpt\\-4o · 1,100 ms"]
+    assert [e.label for e in at.expander] == ["1. retrieve · 30 ms", "2. gpt\\-4o · 1.10 s"]
     assert "How do refunds work?" in all_code(at)
     assert "Refunds take 5 days." in all_code(at)
 
@@ -241,3 +241,15 @@ def test_every_run_detail_renders(populated):
         at.selectbox(key="detail_run_id").set_value(run_id)
         rerun(at)
         assert f"Run #{run_id}" in all_markdown(at)
+
+
+def test_formatting_helpers():
+    from pathlib import Path
+    from mloom.ui import app
+
+    assert app.fmt_ms(850) == "850 ms"
+    assert app.fmt_ms(1478.4) == "1.48 s"
+    assert app.fmt_cost(0.0462) == "$0.0462"
+    assert app.fmt_cost(0.001136) == "$0.00114"
+    assert app.display_path(str(Path.cwd() / "pkg" / "mod.py")) == "pkg/mod.py"
+    assert app.display_path("/opt/elsewhere/mod.py") == "/opt/elsewhere/mod.py"
