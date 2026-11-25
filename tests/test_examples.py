@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.test_dashboard import charts
+
 from mloom.db import database
 from mloom.db.classes import Run
 
@@ -72,7 +74,7 @@ def test_demo_data_populates_dashboard(mloom_home):
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "mloom" / "ui" / "app.py"),
                            default_timeout=60).run()
     assert not at.exception
-    assert len(at.get("vega_lite_chart")) == 4
+    assert len(charts(at)) == 4
     for run_id in at.dataframe[0].value["id"].tolist():
         at.selectbox(key="detail_run_id").set_value(run_id).run()
         assert not at.exception, run_id

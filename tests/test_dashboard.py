@@ -10,7 +10,11 @@ from mloom.sdk.cost import calculate_cost
 from mloom.sdk.emitter import emit_event
 
 APP_PATH = str(Path(mloom.__file__).parent / "ui" / "app.py")
-CHART_TYPE = "vega_lite_chart"
+
+
+def charts(at: AppTest) -> list:
+    # The element type was renamed in newer Streamlit releases.
+    return at.get("vega_lite_chart") + at.get("arrow_vega_lite_chart")
 
 
 def run_app() -> AppTest:
@@ -135,7 +139,7 @@ def test_overview_kpis_and_charts(populated):
     }
     assert kpis["p50 latency"].endswith(" ms") and kpis["p95 latency"].endswith(" ms")
     # Runs over time, latency distribution, tokens by model, cost by model.
-    assert len(at.get(CHART_TYPE)) == 4
+    assert len(charts(at)) == 4
 
 
 def test_sidebar_filters(populated):
