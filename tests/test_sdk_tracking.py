@@ -184,9 +184,9 @@ def test_failed_run_stores_error_trace_and_redacts_secrets(local_project, fetch_
     assert innermost["locals"]["openai_api_key"] == "[REDACTED]"
     assert innermost["locals"]["db_password"] == "[REDACTED]"
     assert innermost["locals"]["user_count"] == "3"
-    # Source lines are kept verbatim; only captured variable values are redacted.
-    assert "sk-very-secret" not in json.dumps(trace["frames"])
-    assert "hunter2" not in json.dumps(trace["frames"])
+    # Neither the locals nor the captured source lines keep the secrets.
+    assert "sk-very-secret" not in json.dumps(trace)
+    assert "hunter2" not in json.dumps(trace)
 
     assert trace["source_context"]["error_line"] == innermost["lineno"]
     assert run["call_site"]["caller_function"] == "test_failed_run_stores_error_trace_and_redacts_secrets"

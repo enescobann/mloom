@@ -5,10 +5,12 @@ Provides structured exception context and call-site provenance
 using Python's `traceback` module and frame objects.
 """
 
+import re
 import sys
 import traceback
 import linecache
 from fnmatch import fnmatch
+from pathlib import Path
 
 # ─── Redaction Patterns ───────────────────────────────────────────────
 # Variable names matching ANY of these (case-insensitive fnmatch) get redacted.
@@ -75,10 +77,89 @@ def _should_redact(var_name: str) -> bool:
     return any(fnmatch(name_lower, pattern) for pattern in REDACT_PATTERNS)
 
 
+# ─── Source-line redaction ────────────────────────────────────────────
+# Captured source lines can contain hard-coded secrets, e.g.
+#     api_key = "sk-..."
+# A string literal bound to a secret-looking name is replaced with
+# "[REDACTED]" before anything is stored. Deliberately regex based (no AST):
+# captured lines are fragments that often don't parse on their own.
+
+_REDACTED_LITERAL = '"[REDACTED]"'
+
+# Optional prefix (r, b, f, rb, ...) plus a single-line string literal.
+# Triple-quoted forms come first so '"""x"""' is not read as '""'.
+_STRING = (
+    r"[rRbBuUfF]{0,2}"
+    r'(?:"""[^\n]*?"""' r"|'''[^\n]*?'''"
+    r'|"(?:[^"\\\n]|\\.)*"' r"|'(?:[^'\\\n]|\\.)*')"
+)
+# "=" that is an assignment or keyword argument, not ==, !=, <=, >=.
+_ASSIGN = r"(?<![=!<>])=(?!=)"
+
+_SOURCE_REDACTIONS = [
+    # name = "..."   name: str = "..."   call(name="...")   obj.name = "..."
+    re.compile(
+        r"(?P<lead>\b(?P<name>[A-Za-z_]\w*)\s*(?::\s*[\w.\[\], |]+?\s*)?"
+        + _ASSIGN + r"\s*)(?P<value>" + _STRING + ")"
+    ),
+    # {"name": "..."}
+    re.compile(
+        r"""(?P<lead>(?P<q>["'])(?P<name>[\w.-]+)(?P=q)\s*:\s*)(?P<value>""" + _STRING + ")"
+    ),
+    # env["NAME"] = "..."
+    re.compile(
+        r"""(?P<lead>\[\s*(?P<q>["'])(?P<name>[\w.-]+)(?P=q)\s*\]\s*"""
+        + _ASSIGN + r"\s*)(?P<value>" + _STRING + ")"
+    ),
+]
+
+
+def _redact_match(match) -> str:
+    if _should_redact(match.group("name")):
+        return match.group("lead") + _REDACTED_LITERAL
+    return match.group(0)
+
+
+def redact_source_line(line: str) -> str:
+    """Replace string literals bound to secret-looking names with "[REDACTED]"."""
+    if not line or ("=" not in line and ":" not in line):
+        return line
+    for pattern in _SOURCE_REDACTIONS:
+        line = pattern.sub(_redact_match, line)
+    return line
+
+
+def redact_source_text(text: str) -> str:
+    """redact_source_line() applied to every line of a multi-line string."""
+    if not text:
+        return text
+    return "\n".join(redact_source_line(line) for line in text.split("\n"))
+
+
+# ─── Internal frames ──────────────────────────────────────────────────
+
+_PACKAGE_DIR = Path(__file__).resolve().parent.parent
+# Also recognises mloom frames recorded on another machine (remote mode).
+_INTERNAL_PATH = re.compile(r"[/\\]mloom[/\\](?:sdk|core|db|server)[/\\][^/\\]+\.py$")
+
+
+def is_internal_frame(filename: str) -> bool:
+    """True for frames inside the mloom package itself (decorator/patch wrappers)."""
+    if not filename:
+        return False
+    try:
+        if Path(filename).resolve().is_relative_to(_PACKAGE_DIR):
+            return True
+    except (OSError, ValueError):
+        pass
+    return bool(_INTERNAL_PATH.search(filename))
+
+
 def _safe_repr(value, max_length: int = 200) -> str:
     """Safely convert a value to a string representation, truncating if needed."""
     try:
-        s = repr(value)
+        # Redact before truncating, e.g. {'api_key': 'sk-...'} or Client(token='...').
+        s = redact_source_line(repr(value))
         if len(s) > max_length:
             return s[:max_length] + "..."
         return s
@@ -120,7 +201,7 @@ def _get_source_context(filename: str, error_lineno: int) -> dict | None:
 
         context_lines = []
         for i in range(start_line, end_line + 1):
-            context_lines.append(all_lines[i - 1].rstrip("\n"))
+            context_lines.append(redact_source_line(all_lines[i - 1].rstrip("\n")))
 
         return {
             "filename": filename,
@@ -153,7 +234,7 @@ def capture_exception_context(exc: BaseException, tb) -> dict:
     """
     # 1. Formatted traceback string (the familiar Python output)
     formatted_lines = traceback.format_exception(type(exc), exc, tb)
-    traceback_formatted = "".join(formatted_lines)
+    traceback_formatted = redact_source_text("".join(formatted_lines))
 
     # 2. Structured frames from traceback.extract_tb
     extracted = traceback.extract_tb(tb)
@@ -174,7 +255,7 @@ def capture_exception_context(exc: BaseException, tb) -> dict:
             "filename": frame_summary.filename,
             "lineno": frame_summary.lineno,
             "function": frame_summary.name,
-            "code_line": frame_summary.line or "",
+            "code_line": redact_source_line(frame_summary.line or ""),
             "locals": frame_locals,
         })
 
