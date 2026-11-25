@@ -406,20 +406,27 @@ def render_metrics(metrics: list):
         for i, m in enumerate(metrics, 1)
     ])
     table["start"] = pd.to_datetime(table["start"])
-    # Nullable dtypes so steps without tokens/cost show empty cells, not "None".
-    for column in ("latency", "input_tokens", "output_tokens"):
-        table[column] = pd.to_numeric(table[column], errors="coerce").astype("Int64")
-    table["cost"] = pd.to_numeric(table["cost"], errors="coerce").astype("float64")
+    # Pre-formatted text: Streamlit renders missing numbers as "None", steps show a dash instead.
+    def _num(value, fmt):
+        return "–" if value is None or pd.isna(value) else fmt.format(value)
+
+    table["latency"] = table["latency"].map(lambda v: _num(v, "{:,.0f} ms"))
+    table["input_tokens"] = table["input_tokens"].map(lambda v: _num(v, "{:,.0f}"))
+    table["output_tokens"] = table["output_tokens"].map(lambda v: _num(v, "{:,.0f}"))
+    table["cost"] = table["cost"].map(lambda v: _num(v, "${:.6f}"))
     st.dataframe(
         table,
         hide_index=True,
         column_config={
+            **TABLE_COLUMNS,
             "n": st.column_config.NumberColumn("#", format="%d"),
             "kind": st.column_config.TextColumn("Kind"),
             "model_name": st.column_config.TextColumn("Model / step"),
-            "input_tokens": st.column_config.NumberColumn("Input tokens", format="localized"),
-            "output_tokens": st.column_config.NumberColumn("Output tokens", format="localized"),
-            **TABLE_COLUMNS,
+            # Pre-formatted as text above.
+            "latency": st.column_config.Column("Latency"),
+            "input_tokens": st.column_config.Column("Input tokens"),
+            "output_tokens": st.column_config.Column("Output tokens"),
+            "cost": st.column_config.Column("Cost"),
         },
     )
 
