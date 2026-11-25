@@ -206,6 +206,11 @@ def test_run_detail_ok_run(populated):
     assert detail_kpis["Steps"] == "1"
     assert detail_kpis["Tokens"] == "1,500"
 
+    steps = at.dataframe[1].value
+    assert steps["kind"].tolist() == ["Step", "LLM call"]
+    assert steps[["input_tokens", "output_tokens", "cost"]].iloc[0].isna().all()
+    assert steps["input_tokens"].iloc[1] == 1000
+
     assert [e.label for e in at.expander] == ["1. retrieve · 30 ms", "2. gpt\\-4o · 1.10 s"]
     assert "How do refunds work?" in all_code(at)
     assert "Refunds take 5 days." in all_code(at)

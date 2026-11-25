@@ -418,6 +418,10 @@ def render_metrics(metrics: list):
         for i, m in enumerate(metrics, 1)
     ])
     table["start"] = pd.to_datetime(table["start"])
+    # Nullable dtypes so steps without tokens/cost show empty cells, not "None".
+    for column in ("latency", "input_tokens", "output_tokens"):
+        table[column] = pd.to_numeric(table[column], errors="coerce").astype("Int64")
+    table["cost"] = pd.to_numeric(table["cost"], errors="coerce").astype("float64")
     st.dataframe(
         table,
         hide_index=True,
