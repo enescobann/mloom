@@ -12,7 +12,7 @@ dependencies = [
     "openai>=1.0",
     "click>=8.0",
     "sqlalchemy>=2.0",
-    "streamlit>=1.30",
+    "streamlit>=1.45",
     "pandas>=2.0",
 ]
 
