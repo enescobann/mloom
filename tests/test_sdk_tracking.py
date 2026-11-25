@@ -309,3 +309,58 @@ def test_sqlite_file_databases_use_wal(tmp_path):
     with engine.connect() as conn:
         assert conn.execute(text("PRAGMA journal_mode")).scalar() == "wal"
         assert conn.execute(text("PRAGMA busy_timeout")).scalar() == database.SQLITE_BUSY_TIMEOUT_MS
+
+
+# ─── live terminal trace ─────────────────────────────────────────────
+
+@pytest.fixture
+def trace_lines(monkeypatch):
+    from mloom.server import trace_logger
+
+    lines = []
+    monkeypatch.setattr(trace_logger.logger, "info", lambda msg, *a, **k: lines.append(msg))
+    monkeypatch.setattr(trace_logger.logger, "error", lambda msg, *a, **k: lines.append(msg))
+    return lines
+
+
+def test_trace_logger_does_not_propagate():
+    from mloom.server import trace_logger
+
+    assert trace_logger.logger.propagate is False
+
+
+def test_live_trace_printed_by_default(trace_lines, fetch_runs):
+    mloom.init(project_id="p")
+
+    @track_run(name="loud")
+    def job():
+        return 1
+
+    job()
+    fetch_runs()
+    assert len(trace_lines) == 1 and '"loud"' in trace_lines[0]
+
+
+def test_verbose_false_silences_live_trace(trace_lines, fetch_runs):
+    mloom.init(project_id="p", verbose=False)
+
+    @track_run
+    def job():
+        return 1
+
+    job()
+    assert len(fetch_runs()) == 1
+    assert trace_lines == []
+
+
+def test_mloom_quiet_env_silences_live_trace(trace_lines, fetch_runs, monkeypatch):
+    monkeypatch.setenv("MLOOM_QUIET", "1")
+    mloom.init(project_id="p")
+
+    @track_run
+    def job():
+        return 1
+
+    job()
+    assert len(fetch_runs()) == 1
+    assert trace_lines == []

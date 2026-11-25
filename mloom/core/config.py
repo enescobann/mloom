@@ -18,6 +18,8 @@ class SDKConfig:
         self.api_key: Optional[str] = None
         self.project_id: Optional[str] = None
         self.mode: str = "local"
+        # Print a live trace line for every recorded run (see trace_output_enabled()).
+        self.verbose: bool = True
 
         self._is_loaded = False
 
@@ -76,12 +78,19 @@ class SDKConfig:
 # This instance will be shared across the entire application.
 config = SDKConfig()
 
+def trace_output_enabled() -> bool:
+    """False when init(verbose=False) was used or MLOOM_QUIET is set."""
+    quiet = os.environ.get("MLOOM_QUIET", "").strip().lower() in ("1", "true", "yes", "on")
+    return config.verbose and not quiet
+
+
 def init(
     project_id: str,
     backend_url: Optional[str] = None,
     api_key: Optional[str] = None,
     mode: Optional[str] = None,
-    persist: bool = False
+    persist: bool = False,
+    verbose: bool = True,
 ):
     """
     Entry point for the developer to initialize the SDK.
@@ -89,6 +98,9 @@ def init(
     `mode` is "local" (SQLite under ~/.mloom) or "remote" (POST to a mloom
     server). When omitted, the mode saved by `mloom server connect` is used,
     falling back to "local".
+
+    `verbose=False` (or the MLOOM_QUIET=1 environment variable) silences the
+    live trace printed to the terminal for every recorded run.
     """
     if mode is not None and mode not in VALID_MODES:
         raise ValueError(f"[Mloom] Invalid mode {mode!r}. Expected one of {VALID_MODES}.")
@@ -101,6 +113,7 @@ def init(
     if mode is not None:
         config.mode = mode
     config.api_key = api_key
+    config.verbose = verbose
 
     if backend_url:
         config.backend_url = backend_url.rstrip("/")

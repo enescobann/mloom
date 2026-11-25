@@ -9,7 +9,12 @@ by watching the terminal.
 
 import logging
 
+from mloom.core.config import trace_output_enabled
+
 logger = logging.getLogger("mloom.trace")
+# The handler below already prints; propagating would duplicate every line
+# in apps that configure the root logger.
+logger.propagate = False
 
 # Only add a handler if one doesn't exist already (avoid duplicates)
 if not logger.handlers:
@@ -107,6 +112,9 @@ def log_run_trace(run) -> None:
         run: A Run ORM instance or a dict with run_name, id, latency,
              error_trace, and call_site keys.
     """
+    if not trace_output_enabled():
+        return
+
     # Support both ORM objects and dicts
     if isinstance(run, dict):
         run_name = run.get("run_name", "Unnamed Run")
