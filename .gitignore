@@ -1,0 +1,13 @@
+/docs
+misc.md
+__pycache__/
+*.egg-info
+.venv/
+.pytest_cache/
+
+# Manual end-to-end scripts that need live servers
+tests/real_world_test.py
+tests/test_e2e.py
+tests/test_mloom_sdk.py
+tests/test_real_scenario.py
+tests/test_trace.py
