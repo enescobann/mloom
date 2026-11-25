@@ -153,6 +153,10 @@ def test_trace_shows_failure_details(runner, local_project):
     assert "ValueError" in out and "bad input" in out
     assert "Call Site:" in out and "_record_runs" in out
     assert "Stack Trace:" in out
+    stack = out.split("Stack Trace:")[1].split("Source Context:")[0]
+    assert "in broken" in stack
+    assert "sync_wrapper" not in stack and "decorators.py" not in stack
+    assert "(1 internal mloom frame hidden)" in stack
     assert "secret_token = [REDACTED]" in out
     assert "attempts = 2" in out
     assert "tok-123" not in out.split("Local Variables:")[1]

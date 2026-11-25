@@ -307,9 +307,14 @@ def trace(run_id: int):
     # Stack Trace
     frames = error_trace.get("frames", [])
     if frames:
+        from mloom.sdk.trace import is_internal_frame
+
+        # Hide mloom's own decorator/patch wrappers (they stay in the stored data).
+        visible = [f for f in frames if not is_internal_frame(f.get("filename", ""))] or frames
+        hidden = len(frames) - len(visible)
         click.echo()
         click.secho("Stack Trace:", bold=True)
-        for frame in frames:
+        for frame in visible:
             filename = frame.get("filename", "?")
             lineno = frame.get("lineno", "?")
             function = frame.get("function", "?")
@@ -317,6 +322,8 @@ def trace(run_id: int):
             click.echo(f'  File "{filename}", line {lineno}, in {function}')
             if code_line:
                 click.echo(f"    {code_line}")
+        if hidden:
+            click.secho(f"  ({hidden} internal mloom {'frame' if hidden == 1 else 'frames'} hidden)", dim=True)
 
     # Source Context
     source_ctx = error_trace.get("source_context")
