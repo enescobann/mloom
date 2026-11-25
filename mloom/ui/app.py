@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from mloom.core.config import config
+from mloom.sdk.trace import is_internal_frame
 from mloom.ui import data
 
 CACHE_TTL_SECONDS = 10
@@ -332,6 +333,33 @@ def render_locals(local_vars: dict) -> str:
     return _code_table(rows)
 
 
+CHAINED_MARKERS = (
+    "During handling of the above exception",
+    "The above exception was the direct cause",
+)
+_TRACEBACK_FILE = re.compile(r'File "([^"]+)"')
+
+
+def shorten_traceback_paths(text: str) -> str:
+    return _TRACEBACK_FILE.sub(lambda m: f'File "{display_path(m.group(1))}"', text)
+
+
+def format_stack(frames: list, error_type: str, message: str) -> tuple[str, int]:
+    """Python-style traceback without mloom's own wrapper frames; returns (text, hidden count)."""
+    visible = [f for f in frames if not is_internal_frame(f.get("filename", ""))] or frames
+    lines = ["Traceback (most recent call last):"]
+    for f in visible:
+        lines.append(
+            f'  File "{display_path(f.get("filename", "?"))}", line {f.get("lineno", "?")}, '
+            f'in {f.get("function", "?")}'
+        )
+        code_line = (f.get("code_line") or "").strip()
+        if code_line:
+            lines.append(f"    {code_line}")
+    lines.append(f"{error_type}: {message}" if message else error_type)
+    return "\n".join(lines), len(frames) - len(visible)
+
+
 def render_error(error_trace: dict):
     error_type = error_trace.get("error_type", "Error")
     message = error_trace.get("error_message", "")
@@ -339,16 +367,17 @@ def render_error(error_trace: dict):
     st.error(f"**{md_escape(error_type)}**" + (f": {md_escape(message)}" if message else ""))
 
     frames = error_trace.get("frames") or []
-    traceback_text = error_trace.get("traceback_formatted")
-    if not traceback_text and frames:
-        traceback_text = "\n".join(
-            f'File "{display_path(f.get("filename", "?"))}", line {f.get("lineno", "?")}, in {f.get("function", "?")}\n'
-            f'    {f.get("code_line", "").strip()}'
-            for f in frames
-        )
-    if traceback_text:
+    if frames:
+        stack_text, hidden = format_stack(frames, error_type, message)
         st.markdown("**Stack trace**")
-        st.code(traceback_text.rstrip(), language="python")
+        st.code(stack_text, language="python")
+        if hidden:
+            st.caption(f"{hidden} internal mloom {'frame' if hidden == 1 else 'frames'} hidden.")
+
+    full_traceback = error_trace.get("traceback_formatted") or ""
+    if any(marker in full_traceback for marker in CHAINED_MARKERS) or (full_traceback and not frames):
+        with st.expander("Full traceback, including chained exceptions"):
+            st.code(shorten_traceback_paths(full_traceback.rstrip()), language="python")
 
     source = error_trace.get("source_context")
     if source and source.get("lines"):

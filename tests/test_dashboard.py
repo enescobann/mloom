@@ -219,7 +219,17 @@ def test_run_detail_failed_run(populated):
     assert ":red[**FAILED**]" in all_markdown(at)
     [error] = at.error
     assert "TimeoutError" in error.value and "berlin" in error.value
-    assert "Traceback (most recent call last)" in all_code(at)
+    stack = next(c.value for c in at.code if c.value.startswith("Traceback (most recent call last)"))
+    assert 'File "tests/test_dashboard.py"' in stack and "in sync_inventory" in stack
+    assert str(Path.cwd()) not in stack
+    assert "sync_wrapper" not in stack and "decorators.py" not in stack
+    assert stack.endswith("TimeoutError: warehouse berlin did not answer")
+    assert "1 internal mloom frame hidden." in [c.value for c in at.caption]
+    # No chained exception, so no separate full traceback.
+    assert not [e for e in at.expander if e.label.startswith("Full traceback")]
+
+    # The secret appears neither in locals nor in source lines.
+    assert "inv-secret-123" not in all_markdown(at) + all_code(at)
 
     source = next(m.value for m in at.markdown if '<td class="mloom-ln">' in m.value)
     error_row = source.split('class="mloom-error"')[1].split("</tr>")[0]
@@ -253,3 +263,30 @@ def test_formatting_helpers():
     assert app.fmt_cost(0.001136) == "$0.00114"
     assert app.display_path(str(Path.cwd() / "pkg" / "mod.py")) == "pkg/mod.py"
     assert app.display_path("/opt/elsewhere/mod.py") == "/opt/elsewhere/mod.py"
+
+
+def test_stack_helpers_hide_internal_frames_and_shorten_paths():
+    from mloom.ui import app
+    import mloom.sdk.decorators as decorators
+
+    frames = [
+        {"filename": decorators.__file__, "lineno": 65, "function": "sync_wrapper",
+         "code_line": "return func(*args, **kwargs)"},
+        {"filename": str(Path.cwd() / "app" / "bot.py"), "lineno": 7, "function": "handle",
+         "code_line": "raise KeyError(index)"},
+    ]
+    text, hidden = app.format_stack(frames, "KeyError", "'legacy-wiki'")
+    assert hidden == 1
+    assert text.splitlines() == [
+        "Traceback (most recent call last):",
+        '  File "app/bot.py", line 7, in handle',
+        "    raise KeyError(index)",
+        "KeyError: 'legacy-wiki'",
+    ]
+
+    # Only internal frames (an error inside mloom itself): show them rather than nothing.
+    text, hidden = app.format_stack(frames[:1], "RuntimeError", "")
+    assert hidden == 0 and "sync_wrapper" in text and text.endswith("RuntimeError")
+
+    raw = f'  File "{Path.cwd() / "app" / "bot.py"}", line 7, in handle\n'
+    assert app.shorten_traceback_paths(raw) == '  File "app/bot.py", line 7, in handle\n'
