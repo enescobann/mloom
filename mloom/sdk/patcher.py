@@ -105,7 +105,7 @@ def patch_openai():
         start_time = time.time()
         try:
             response = original_sync_create(*args, **kwargs)
-        except Exception as e:
+        except BaseException as e:
             _safe_record(start_time, kwargs, error=e)
             raise  # Always re-raise so user code behaves normally!
         _safe_record(start_time, kwargs, response=response)
@@ -117,7 +117,7 @@ def patch_openai():
         start_time = time.time()
         try:
             response = await original_async_create(*args, **kwargs)
-        except Exception as e:
+        except BaseException as e:  # incl. CancelledError
             _safe_record(start_time, kwargs, error=e)
             raise
         _safe_record(start_time, kwargs, response=response)

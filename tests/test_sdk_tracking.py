@@ -364,3 +364,40 @@ def test_mloom_quiet_env_silences_live_trace(trace_lines, fetch_runs, monkeypatc
     job()
     assert len(fetch_runs()) == 1
     assert trace_lines == []
+
+
+# ─── interruption ────────────────────────────────────────────────────
+
+def test_keyboard_interrupt_is_recorded_as_failure(local_project, fetch_runs):
+    @track_run(name="interrupted")
+    def job():
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        job()
+
+    [run] = fetch_runs()
+    assert run["error_trace"]["error_type"] == "KeyboardInterrupt"
+
+
+def test_cancelled_task_is_recorded_as_failure(local_project, fetch_runs):
+    @track_metric("slow-step")
+    async def slow_step():
+        await asyncio.sleep(10)
+
+    @track_run(name="cancelled")
+    async def job():
+        await slow_step()
+
+    async def main():
+        task = asyncio.create_task(job())
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(main())
+
+    [run] = fetch_runs()
+    assert run["error_trace"]["error_type"] == "CancelledError"
+    assert run["metrics"][0]["response"].startswith("ERROR:")

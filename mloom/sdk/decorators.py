@@ -45,7 +45,7 @@ def track_run(name: str = None, run_type: str = None):
                 error_trace = None
                 try:
                     return await func(*args, **kwargs)
-                except Exception as e:
+                except BaseException as e:  # incl. KeyboardInterrupt, CancelledError
                     error_trace = _safe_capture(e, sys.exc_info()[2])
                     raise
                 finally:
@@ -63,7 +63,7 @@ def track_run(name: str = None, run_type: str = None):
                 error_trace = None
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except BaseException as e:  # incl. KeyboardInterrupt
                     error_trace = _safe_capture(e, sys.exc_info()[2])
                     raise
                 finally:
@@ -144,7 +144,7 @@ def track_metric(metric_type: str = "custom_metric"):
                 start_time = time.time()
                 try:
                     result = await func(*args, **kwargs)
-                except Exception as e:
+                except BaseException as e:
                     _record_metric(start_time, args, kwargs, error=e)
                     raise # Re-raise so we don't break the user's app!
                 _record_metric(start_time, args, kwargs, result=result)
@@ -158,7 +158,7 @@ def track_metric(metric_type: str = "custom_metric"):
                 start_time = time.time()
                 try:
                     result = func(*args, **kwargs)
-                except Exception as e:
+                except BaseException as e:
                     _record_metric(start_time, args, kwargs, error=e)
                     raise
                 _record_metric(start_time, args, kwargs, result=result)
